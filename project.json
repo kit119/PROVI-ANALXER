@@ -1,0 +1,45 @@
+{
+  "project": {
+    "name": "Demo Construction Project - 20 Activities"
+  },
+  "tasks": [
+
+    { "id": 1, "code": "M-01", "name": "Notice to Proceed", "start": "2026-01-01", "finish": "2026-01-01", "duration": 0, "progress": 1, "status": "TK_Complete", "float_hours": 0 },
+    { "id": 2, "code": "P1-01", "name": "Procurement Planning", "start": "2026-01-02", "finish": "2026-01-10", "duration": 8, "progress": 1, "status": "TK_Complete", "float_hours": 16, "baseline_start": "2026-01-02", "baseline_finish": "2026-01-09" },
+    { "id": 3, "code": "P1-02", "name": "Vendor Selection", "start": "2026-01-11", "finish": "2026-01-20", "duration": 9, "progress": 1, "status": "TK_Complete", "float_hours": 8, "baseline_start": "2026-01-10", "baseline_finish": "2026-01-18" },
+    { "id": 4, "code": "P1-03", "name": "Material Delivery", "start": "2026-01-21", "finish": "2026-01-30", "duration": 9, "progress": 0.8, "status": "TK_Active", "float_hours": 0, "baseline_start": "2026-01-20", "baseline_finish": "2026-01-28" },
+    { "id": 5, "code": "M-02", "name": "Procurement Complete", "start": "2026-01-31", "finish": "2026-01-31", "duration": 0, "progress": 0, "status": "TK_Active", "float_hours": 0 },
+    { "id": 6, "code": "V1-01", "name": "Site Preparation", "start": "2026-02-01", "finish": "2026-02-10", "duration": 9, "progress": 0.5, "status": "TK_Active", "float_hours": 0 },
+    { "id": 7, "code": "V1-02", "name": "Foundation Work", "start": "2026-02-11", "finish": "2026-02-25", "duration": 14, "progress": 0.2, "status": "TK_Active", "float_hours": 0 },
+    { "id": 8, "code": "V1-03", "name": "Structure Work", "start": "2026-02-26", "finish": "2026-03-20", "duration": 22, "progress": 0, "status": "TK_Active", "float_hours": 0 },
+    { "id": 9, "code": "V1-04", "name": "Roof Installation", "start": "2026-03-21", "finish": "2026-03-30", "duration": 9, "progress": 0, "status": "TK_Active", "float_hours": 8 },
+    { "id": 10, "code": "V1-05", "name": "MEP Installation", "start": "2026-03-25", "finish": "2026-04-10", "duration": 16, "progress": 0, "status": "TK_Active", "float_hours": 16 },
+    { "id": 11, "code": "M-03", "name": "Structure Complete", "start": "2026-04-15", "finish": "2026-04-15", "duration": 0, "progress": 0, "status": "TK_Active", "float_hours": 0 },
+    { "id": 12, "code": "C1-01", "name": "Interior Finishing", "start": "2026-04-16", "finish": "2026-05-05", "duration": 19, "progress": 0, "status": "TK_Active", "float_hours": 0 },
+    { "id": 13, "code": "C1-02", "name": "Testing & Commissioning", "start": "2026-05-06", "finish": "2026-05-20", "duration": 14, "progress": 0, "status": "TK_Active", "float_hours": 0 },
+    { "id": 14, "code": "C1-03", "name": "Final Inspection", "start": "2026-05-21", "finish": "2026-05-25", "duration": 4, "progress": 0, "status": "TK_Active", "float_hours": 0 },
+    { "id": 15, "code": "M-04", "name": "Project Completion", "start": "2026-05-30", "finish": "2026-05-30", "duration": 0, "progress": 0, "status": "TK_Active", "float_hours": 0 },
+    { "id": 16, "code": "V1-06", "name": "External Works", "start": "2026-03-10", "finish": "2026-04-01", "duration": 22, "progress": 0.1, "status": "TK_Active", "float_hours": 24 },
+    { "id": 17, "code": "V1-07", "name": "Landscaping", "start": "2026-04-05", "finish": "2026-04-20", "duration": 15, "progress": 0, "status": "TK_Active", "float_hours": 24 },
+    { "id": 18, "code": "P1-04", "name": "Spare Parts Procurement", "start": "2026-02-01", "finish": "2026-02-15", "duration": 14, "progress": 0, "status": "TK_Active", "float_hours": 40 },
+    { "id": 19, "code": "C1-04", "name": "Training", "start": "2026-05-10", "finish": "2026-05-18", "duration": 8, "progress": 0, "status": "TK_Active", "float_hours": 16 },
+    { "id": 20, "code": "C1-05", "name": "Documentation Handover", "start": "2026-05-22", "finish": "2026-05-29", "duration": 7, "progress": 0, "status": "TK_Active", "float_hours": 0 }
+
+  ],
+  "links": [
+
+    { "id": 1, "source": 1, "target": 2 },
+    { "id": 2, "source": 2, "target": 3 },
+    { "id": 3, "source": 3, "target": 4 },
+    { "id": 4, "source": 4, "target": 5 },
+    { "id": 5, "source": 5, "target": 6 },
+    { "id": 6, "source": 6, "target": 7 },
+    { "id": 7, "source": 7, "target": 8 },
+    { "id": 8, "source": 8, "target": 11 },
+    { "id": 9, "source": 11, "target": 12 },
+    { "id": 10, "source": 12, "target": 13 },
+    { "id": 11, "source": 13, "target": 14 },
+    { "id": 12, "source": 14, "target": 15 }
+
+  ]
+}

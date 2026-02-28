@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>ProVI AnalyXER</title>
+<script src="assets/dhtmlxgantt.js"></script>
+<link  href="assets/dhtmlxgantt.css" rel="stylesheet">
+<link  href="assets/bootstrap.min.css" rel="stylesheet">
+<script src="assets/jquery-3.7.1.min.js"></script>
+<link  href="assets/dataTables.bootstrap5.min.css" rel="stylesheet">
+<script src="assets/jquery.dataTables.min.js"></script>
+<script src="assets/dataTables.bootstrap5.min.js"></script>
+<script src="assets/chart.js"></script>
+<script src="assets/d3.v7.min.js"></script>
+
+<style>
+  body { font-family: Arial; margin:0; }
+  header { padding:15px; background:#111; color:white; }
+  section { padding:15px; }
+  #gantt_here { width:100%; height:600px; overflow-x: auto;}
+  .card { background:#f5f5f5; padding:10px; margin:10px 0; }
+  table { border-collapse: collapse; width:100%; }
+  th, td { border:1px solid #ccc; padding:6px; text-align:left; }
+  h2 { margin-top:40px; }
+  .today_line {background-color: orange;}
+  .gantt_row.wbs_top .gantt_cell,
+  .gantt_task_row.wbs_top .gantt_cell {font-weight: 700 !important;font-size: 14px;}
+  .gantt_grid_head_cell {font-weight: 700 !important;color: #111 !important;background-color: #f1f3f5 !important;}  .gantt_task_line {border-radius: 6px;}
+  .gantt_scale_line,.gantt_scale_cell {font-weight: 700 !important;color: #111 !important;}
+  .gantt_scale_cell {opacity: 1 !important;}
+  .gantt_task_content {font-weight: 500;}
+  .gantt_grid_data .gantt_row:nth-child(even){background-color: #f9fafb;}
+  .gantt_task_line {background: linear-gradient(90deg, #3b82f6, #2563eb);border: none;}
+  .gantt_task_progress {background: rgba(255,255,255,0.4);}
+  .critical_task .gantt_task_content {background-color: red !important;}
+  .gantt_task_line.gantt_milestone {background: blue !important;border-radius: 50%;width: 14px !important;height: 14px !important;}
+
+</style>
+</head>
+<body>
+
+<header class="bg-dark text-white p-3">
+  <div class="container-fluid">
+    <h3 class="mb-0">ProVI AnalyXER</h3>
+  </div>
+</header>
+
+<section class="container-fluid mt-4">
+
+<input type="file" id="fileInput" accept=".json">
+
+<h2>🩺️ Project Status & Health</h2>
+<div class="row" id="health-cards"></div>
+<div class="card shadow-sm mb-4">
+  <div class="card-body" id="summary"></div>
+</div>
+
+<h2>📅 Gantt Chart</h2>
+<div class="row mb-3">
+  <div class="col-md-3">
+    <label class="form-label mb-1"><b>View by Time</b></label>
+	<div class="btn-group btn-group-sm" role="group" id="zoomButtons">
+	  <button class="btn btn-outline-primary active" data-zoom="year">Y</button>
+	  <button class="btn btn-outline-primary" data-zoom="quarter">Q</button>
+	  <button class="btn btn-outline-primary" data-zoom="month">M</button>
+	  <button class="btn btn-outline-primary" data-zoom="week">W</button>
+	  <button class="btn btn-outline-primary" data-zoom="day">D</button>
+	  <button class="btn btn-outline-secondary" onclick="setWBSLevel(1)">1</button>
+	  <button class="btn btn-outline-secondary" onclick="setWBSLevel(2)">2</button>
+	  <button class="btn btn-outline-secondary" onclick="setWBSLevel(3)">3</button>
+	</div>
+  </div>
+  <div class="col-md-3">
+    <label class="form-label mb-1"><b>Filter by Code & Name</b></label>
+    <input type="text" class="form-control form-control-sm" id="codeFilter"
+       placeholder="milestone*, critical, all, delay>10, code[M,P,V,C][1,2,C]">
+  </div>
+</div>
+
+<div id="gantt_here"></div>
+<h2 class="mt-4">📈 S-Curve</h2>
+<div class="card shadow-sm mb-4">
+  <div class="card-body">
+    <canvas id="scurveChart" height="120"></canvas>
+  </div>
+</div>
+
+<h2>🗂 WBS Hierarchy</h2>
+<div id="wbsChart" style="height:1000px;"></div>
+
+<h2>❗ Critical Activities</h2>
+<div id="critical"></div>
+
+<h2>🐌 Delays</h2>
+<div id="delay"></div>
+
+<h2>🚩 Milestones</h2>
+<div id="milestones"></div>
+
+<h2>📊 Schedule Statistics</h2>
+<div id="report"></div>
+
+</section>
+
+<script>
+let projectData = null;
+let currentFilter = "all";
+let wbsLevel = 1;
+
+function setWBSLevel(level){
+    wbsLevel = level;
+    buildGantt();
+}
+
+function loadJSON(data){
+    projectData = data;
+    buildSummary();
+    buildGantt();
+    buildCritical();
+    buildDelay();
+    buildMilestones();
+    buildReport();
+    buildSCurve();
+    buildWBSChart();
+}
+
+fetch("project.json")
+.then(res => res.json())
+.then(data => loadJSON(data))
+.catch(err => console.log("Use file upload if auto-load fails"));
+
+document.getElementById("fileInput").addEventListener("change", function(e){
+    const reader = new FileReader();
+    reader.onload = function(evt){
+        loadJSON(JSON.parse(evt.target.result));
+    };
+    reader.readAsText(e.target.files[0]);
+});
+
+document.addEventListener("DOMContentLoaded", function(){
+
+    const zoomButtons = document.querySelectorAll("#zoomButtons button");
+    zoomButtons.forEach(btn => {
+        btn.addEventListener("click", function(){
+            zoomButtons.forEach(b => b.classList.remove("active"));
+            this.classList.add("active");
+            setZoom(this.getAttribute("data-zoom"));
+        });
+    });
+
+    const codeFilter = document.getElementById("codeFilter");
+	if(codeFilter){
+		codeFilter.value = "milestone"; // default
+		codeFilter.addEventListener("keydown", function(e){
+			if(e.key === "Enter"){
+				currentFilter = this.value.trim().toLowerCase();
+				buildGantt();
+				buildSCurve();
+			}
+		});
+	}
+
+
+});
+
+
+function buildWBSChart(){
+
+    const tasks = applyFilter(projectData.tasks);
+    const WIDTH = 1000;
+    const HEIGHT = 800;
+    const INITIAL_LEVEL = 3;   // เริ่มแค่ Project -> M,P,V,C
+
+    // ===== BUILD HIERARCHY =====
+    const root = { name:"Project", children:[] };
+
+    tasks.forEach(t=>{
+        if(!t.code) return;
+        const parts = t.code.split("-");
+        let current = root;
+
+        parts.forEach(p=>{
+            let node = current.children.find(c=>c.name===p);
+            if(!node){
+                node = { name:p, children:[] };
+                current.children.push(node);
+            }
+            current = node;
+        });
+            current.children.push({
+              name: t.name,     // แสดงชื่อกิจกรรม
+              children: []
+            });	
+        
+    });
+
+    const rootNode = d3.hierarchy(root);
+
+    // collapse เกินระดับเริ่มต้น
+    rootNode.each(d=>{
+        if(d.depth > INITIAL_LEVEL){
+            d._children = d.children;
+            d.children = null;
+        }
+    });
+
+    d3.select("#wbsChart").html("");
+
+    const svg = d3.select("#wbsChart")
+        .append("svg")
+        .attr("width", WIDTH)
+        .attr("height", HEIGHT)
+        .append("g")
+        .attr("transform", "translate(80,40)");
+
+    const tree = d3.tree()
+        .size([HEIGHT-80, WIDTH-400]); // y = depth, x = vertical
+
+    update();
+
+    function update(){
+
+        tree(rootNode);
+
+        // ---- LINKS ----
+        const link = svg.selectAll("path.link")
+            .data(rootNode.links(), d=>d.target.data.name+d.target.depth);
+
+        link.enter()
+            .append("path")
+            .attr("class","link")
+            .merge(link)
+            .attr("fill","none")
+            .attr("stroke","#999")
+            .attr("stroke-opacity",0.4)
+            .attr("stroke-width",1)
+            .attr("d", d3.linkHorizontal()
+                .x(d=>d.y)
+                .y(d=>d.x)
+            );
+
+        link.exit().remove();
+
+        // ---- NODES ----
+        const node = svg.selectAll("g.node")
+            .data(rootNode.descendants(), d=>d.data.name+d.depth);
+
+        const nodeEnter = node.enter()
+            .append("g")
+            .attr("class","node")
+            .attr("transform", d=>`translate(${d.y},${d.x})`)
+            .on("click",(e,d)=>toggle(d));
+
+        nodeEnter.append("circle")
+            .attr("r",5)
+            .attr("fill","#1f2937");
+
+        nodeEnter.append("text")
+            .attr("dy","0.32em")
+            .attr("x",8)
+            .text(d=>d.data.name)
+            .style("font-size","10px")
+            .style("letter-spacing","-0.2px");;
+
+        node.merge(nodeEnter)
+            .attr("transform", d=>`translate(${d.y},${d.x})`);
+
+        node.exit().remove();
+    }
+
+    function toggle(d){
+        if(d.children){
+            d._children = d.children;
+            d.children = null;
+        }else{
+            d.children = d._children;
+            d._children = null;
+        }
+        update();
+    }
+}
+
+
+function buildSummary() {
+    const tasks = projectData.tasks;
+    const total = tasks.length;
+    
+    // คำนวณวัน
+    const startDates = tasks.map(t => new Date(t.start)).filter(d => !isNaN(d));
+    const finishDates = tasks.map(t => new Date(t.finish)).filter(d => !isNaN(d));
+    const minStart = new Date(Math.min(...startDates));
+    const maxFinish = new Date(Math.max(...finishDates));
+
+    // คำนวณสถานะ
+    const completed = tasks.filter(t => t.status === "TK_Complete").length;
+    const critical = tasks.filter(t => t.float_hours !== null && t.float_hours <= 0).length;
+    const overallProgress = ((2*completed / total) * 100).toFixed(1);
+    const criticalPercent = ((critical / total) * 100).toFixed(1);
+
+    // สร้างสถานะ Dashboard (Health Cards)
+    const healthHtml = `
+        <div class="col-md-3 mb-3">
+            <div class="card bg-primary text-white text-center p-3">
+                <h6>Overall Progress</h6>
+                <h3>${overallProgress}%</h3>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card ${criticalPercent > 20 ? 'bg-danger' : 'bg-warning'} text-white text-center p-3">
+                <h6>Critical Activities</h6>
+                <h3>${criticalPercent}%</h3>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card bg-success text-white text-center p-3">
+                <h6>Completed Tasks</h6>
+                <h3>${completed.toLocaleString()}</h3>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card bg-info text-white text-center p-3">
+                <h6>Project Days</h6>
+                <h3>${Math.ceil((maxFinish - minStart) / (1000 * 60 * 60 * 24))} Days</h3>
+            </div>
+        </div>
+    `;
+    document.getElementById("health-cards").innerHTML = healthHtml;
+
+    // ส่วนรายละเอียด Project Summary
+    document.getElementById("summary").innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <b>Project Name:</b> ${projectData.project.name}<br>
+                <b>Data Date:</b> ${new Date().toISOString().split("T")[0]}<br>
+                <b>Total Activities:</b> ${total.toLocaleString()}
+            </div>
+            <div class="col-md-6 text-md-end">
+                <b>Planned Start:</b> ${minStart.toISOString().split("T")[0]}<br>
+                <b>Planned Finish:</b> ${maxFinish.toISOString().split("T")[0]}<br>
+                <span class="badge ${criticalPercent > 15 ? 'bg-danger' : 'bg-success'}">
+                    Schedule Density: ${criticalPercent > 15 ? 'High Risk' : 'Healthy'}
+                </span>
+            </div>
+        </div>
+    `;
+}
+
+function setZoom(level){
+    gantt.ext.zoom.setLevel(level);
+}
+
+function applyFilter(tasks){
+
+    if(!currentFilter || currentFilter === "all")
+        return tasks;
+
+    return tasks.filter(t => {
+		if(currentFilter === "delay"){
+		  if(!t.actual_finish || !t.finish) return false;
+		  const delay = (new Date(t.actual_finish) - new Date(t.finish)) / (1000*60*60*24);
+		  return delay > 0;
+	    }
+		if(currentFilter === "ms" || currentFilter === "milestone"){return t.duration === 0;}
+        if(currentFilter === "cri" || currentFilter === "critical"){return t.float_hours !== null && t.float_hours <= 0;}
+        if(currentFilter.startsWith("delay>")){
+            const days = parseFloat(currentFilter.split(">")[1]);
+            if(!t.actual_finish || !t.finish) return false;
+            const delay = (new Date(t.actual_finish) - new Date(t.finish)) / (1000*60*60*24);
+            return delay > days;
+        }
+        return ((t.code || "") + " " + (t.name || "")).toLowerCase().includes(currentFilter);
+
+    });
+}
+
+
+function buildHierarchyFromCode(tasks){
+    const wbsMap = {};
+    const result = [];
+    tasks.forEach(t => {
+        if(!t.code) return;
+        let currentPath = "";
+        let parentId = 0;
+        //const parts = t.code.split("-");
+        //parts.forEach((p, index) => {
+        //    currentPath = currentPath ? currentPath + "-" + p : p;
+        //    if(!wbsMap[currentPath]){
+        //        const wbsId = "WBS_" + currentPath;
+        //        wbsMap[currentPath] = {id: wbsId,text: currentPath,code: currentPath,start_date: t.start,duration: 1,parent: parentId,type: "project"};
+        //        result.push(wbsMap[currentPath]);
+        //    }
+        //    parentId = wbsMap[currentPath].id;
+        //});
+        //const topLevel = t.code.split("-")[0];
+        const topLevel = t.code.split("-").slice(0,wbsLevel).join("-");
+		if(!wbsMap[topLevel]){
+		  const wbsId = "WBS_" + topLevel;
+		  //const wbsTxt = {M:'MILESTONE',P1:'PROCUREMENT #1',P2:'PROCUREMENT #2',PC:'PROCUREMENT #C',V1:'CONSTRUCTION #1',V2:'CONSTRUCTION #2',VC:'CONSTRUCTION #C',C1:'COMMISSIOING #1',C2:'COMMISSIOING #2',CC:'COMMISSIOING #C'}
+		  wbsMap[topLevel] = {id: wbsId,text: topLevel,code: topLevel,start_date: t.start,duration: 1,parent: 0,type: "project",open: true};
+		  result.push(wbsMap[topLevel]);
+		}
+		parentId = wbsMap[topLevel].id;
+
+        // ใส่ task จริงไว้ใต้ WBS สุดท้าย
+        result.push({
+            id: t.id,
+            code: t.code,
+            text: t.name,
+            start_date: t.start,
+            duration: t.duration || 1,
+            progress: t.progress || 0,
+            float: t.float_hours || "",
+            parent: parentId,
+            type: t.duration === 0 ? "milestone" : "task"
+        });
+    });
+    return result;
+}
+
+function buildGantt(){
+
+    gantt.clearAll();
+
+    /* ===============================
+       BASIC CONFIG
+    =============================== */
+
+    gantt.config.date_format = "%Y-%m-%d";
+    gantt.config.scale_height = 60;
+    gantt.config.row_height = 28;
+    gantt.config.bar_height = 18;
+    gantt.config.open_tree_initially = true;
+    gantt.config.order_branch = true;
+    gantt.config.order_branch_free = true;
+    gantt.config.grid_resize = true;
+    gantt.config.columns_resize = true;
+    gantt.config.sort = true;
+    gantt.config.show_progress = true;
+    gantt.config.drag_progress = true;
+    gantt.config.drag_resize = true;
+    gantt.config.drag_move = true;
+    gantt.config.work_time = true;
+    gantt.config.duration_unit = "day";
+
+    gantt.plugins({
+        marker: true,
+        critical_path: true,
+        auto_scheduling: true,
+        baseline:true,
+        tooltip: true,
+        undo: true,
+        keyboard_navigation: true,
+        click_drag: true,
+        fullscreen: true,
+        quick_info: true,
+    });
+    
+    /* ===============================
+       TODAY MARKER
+    =============================== */
+
+    gantt.addMarker({
+        start_date: new Date(),
+        css: "today_line",
+        text: "Today",
+        title: new Date().toDateString()
+    });
+
+    /* ===============================
+       ZOOM LEVELS
+    =============================== */
+
+    const zoomConfig = {
+        levels: [
+            {
+                name: "year",
+                scale_height: 60,
+                min_column_width: 50,
+                scales: [
+                    { unit: "year", step: 1, format: "%Y" }
+                ]
+            },
+            {
+                name: "quarter",
+                scale_height: 60,
+                min_column_width: 50,
+                scales: [
+                    { unit: "year", step: 1, format: "%Y" },
+                    { unit: "month", step: 3, format: function(date){return "Q" + (Math.floor(date.getMonth() / 3) + 1);}}
+                ]
+            },
+            {
+                name: "month",
+                scale_height: 60,
+                min_column_width: 80,
+                scales: [
+                    { unit: "year", step: 1, format: "%Y" },
+                    { unit: "month", step: 1, format: "%M" }
+                ]
+            },
+            {
+                name: "week",
+                scale_height: 60,
+                min_column_width: 50,
+                scales: [
+                    { unit: "month", step: 1, format: "%M %Y" },
+                    { unit: "week", step: 1, format: "W%W" }
+                ]
+            },
+            {
+                name: "day",
+                scale_height: 60,
+                min_column_width: 40,
+                scales: [
+                    { unit: "month", step: 1, format: "%M" },
+                    { unit: "day", step: 1, format: "%d" }
+                ]
+            }
+        ]
+    };
+
+    gantt.ext.zoom.init(zoomConfig);
+    gantt.ext.zoom.setLevel("year"); // default
+
+    /* ===============================
+       GRID COLUMNS (Primavera Style)
+    =============================== */
+
+    gantt.config.columns = [
+        { name: "wbs", label: "WBS", width: 60, tree: true, resize: true },
+        { name: "code", label: "Code", width: 80, resize: true },
+        { name: "text", label: "Activity Name", width: 250, resize: true },
+        { name: "start_date", label: "Start", align: "center", width: 80 },
+        { name: "duration", label: "Dur", align: "center", width: 50 },
+        { name: "float", label: "Float", align: "center", width: 50 },
+        //{ name: "add", width: 40 }
+    ];
+
+    /* ===============================
+       PREPARE DATA
+    =============================== */
+
+	let filteredTasks = applyFilter(projectData.tasks);
+    // full wbs
+    const data = buildHierarchyFromCode(filteredTasks);
+	
+	//flat wbs
+	//const data = filteredTasks.map(t => {
+	//	const taskObj = {id: t.id,code: t.code,text: t.name,start_date: t.start,duration: t.duration || 1,progress: t.progress || 0,float: t.float_hours || "",parent: t.parent || 0,type: t.duration === 0 ? "milestone" : "task"};
+	//	if(t.baseline_start && t.baseline_finish){taskObj.baselines = [{start_date: t.baseline_start,end_date: t.baseline_finish}];}
+	//	return taskObj;
+	//});
+
+
+	const validIds = new Set(filteredTasks.map(t => t.id));
+
+	const links = projectData.links
+		.filter(l => validIds.has(l.source) && validIds.has(l.target))
+		.map(l => ({
+			id: l.id,
+			source: l.source,
+			target: l.target,
+			type: "0"
+		}));
+
+
+    /* ===============================
+       CRITICAL STYLE
+    =============================== */
+
+    gantt.templates.task_class = function(start, end, task){
+        const original = projectData.tasks.find(x => x.id == task.id);
+        if(original && original.float_hours !== null && original.float_hours <= 0){
+            return "critical_task";
+        }
+        return "";
+    };
+
+    /* ===============================
+       AUTO FIT PROJECT RANGE
+    =============================== */
+
+    const startDates = projectData.tasks.map(t => new Date(t.start)).filter(d => !isNaN(d));
+    const finishDates = projectData.tasks.map(t => new Date(t.finish)).filter(d => !isNaN(d));
+
+    const minStart = new Date(Math.min(...startDates));
+    const maxFinish = new Date(Math.max(...finishDates));
+
+    gantt.config.start_date = minStart;
+    gantt.config.end_date = maxFinish;
+
+	gantt.templates.grid_row_class = function(start, end, task){if(task.parent == 0){return "wbs_top";} else return ""; };
+    /* ===============================
+       INIT + PARSE
+    =============================== */
+
+    gantt.config.show_baselines = true;
+    gantt.init("gantt_here");
+    // shortkey & mousescroll
+    document.addEventListener("keydown",e=>{window._zi??=0;["[","]"].includes(e.key)&&gantt.ext.zoom.setLevel(["year","quarter","month","week","day"][e.key==="["?window._zi=Math.max(0,--window._zi):window._zi=Math.min(4,++window._zi)])});
+    document.getElementById("gantt_here").addEventListener("wheel",e=>e.ctrlKey&&(e.preventDefault(),gantt.ext.zoom.setLevel(["year","quarter","month","week","day"][Math.max(0,Math.min(4,(window._z=(window._z??0)+(e.deltaY<0?1:-1))))])),{passive:false});
+    
+    gantt.parse({ data: data, links: links });
+    
+    
+    
+}
+
+function buildCritical(){
+    const critical = projectData.tasks.filter(t => t.float_hours !== null && t.float_hours <= 0);
+
+    let html = `
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <table id="criticalTable" class="table table-striped table-hover table-sm" style="width:100%">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Float (hrs)</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    critical.forEach(t=>{
+        html += `
+          <tr>
+            <td>${t.code}</td>
+            <td>${t.name}</td>
+            <td class="${t.float_hours <= 0 ? 'text-danger fw-bold' : ''}">
+              ${t.float_hours}
+            </td>
+          </tr>
+        `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+      </div>
+    </div>
+    `;
+
+    document.getElementById("critical").innerHTML = html;
+
+    $('#criticalTable').DataTable({
+        pageLength: 10,
+        order: [[2, 'asc']]
+    });
+}
+function buildDelay(){
+    const delayed = projectData.tasks.filter(t=>{
+        if(!t.actual_finish || !t.finish) return false;
+        return new Date(t.actual_finish) > new Date(t.finish);
+    });
+
+    delayed.sort((a,b)=>
+        (new Date(b.actual_finish) - new Date(b.finish)) -
+        (new Date(a.actual_finish) - new Date(a.finish))
+    );
+
+    let html = `
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <table id="delayTable" class="table table-striped table-hover table-sm" style="width:100%">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Delay (days)</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    delayed.slice(0,50).forEach(t=>{
+        const delay = (new Date(t.actual_finish) - new Date(t.finish))/(1000*60*60*24);
+
+        html += `
+          <tr>
+            <td>${t.code}</td>
+            <td class="${delay > 5 ? 'text-warning fw-bold' : ''}">
+              ${delay.toFixed(1)}
+            </td>
+          </tr>
+        `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+      </div>
+    </div>
+    `;
+
+    document.getElementById("delay").innerHTML = html;
+
+    $('#delayTable').DataTable({
+        pageLength: 10,
+        order: [[1, 'desc']]
+    });
+}
+
+
+function buildMilestones(){
+    const milestones = projectData.tasks.filter(t => t.duration === 0);
+
+    let html = `
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <table id="milestoneTable" class="table table-striped table-hover table-sm" style="width:100%">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Code</th>
+              <th>Name</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    milestones.forEach(t=>{
+        html += `
+          <tr>
+            <td>${t.start}</td>
+            <td>${t.code}</td>
+            <td>${t.name}</td>
+          </tr>
+        `;
+    });
+
+    html += `
+          </tbody>
+        </table>
+      </div>
+    </div>
+    `;
+
+    document.getElementById("milestones").innerHTML = html;
+
+    $('#milestoneTable').DataTable({
+        pageLength: 10
+    });
+}
+
+
+function buildReport(){
+    const tasks = projectData.tasks;
+    const completed = tasks.filter(t => t.status === "TK_Complete").length;
+    const active = tasks.filter(t => t.status === "TK_Active").length;
+    const notStarted = tasks.length - completed - active;
+
+    document.getElementById("report").innerHTML = `
+        Completed: ${completed}<br>
+        In Progress: ${active}<br>
+        Not Started: ${notStarted}
+    `;
+}
+
+function buildSCurve(){
+    let tasks = applyFilter(projectData.tasks.filter(t => t.baseline_finish || t.finish));
+    if(!tasks.length) return;
+    const dayMS = 86400000;
+    const allDates = tasks.flatMap(t => 
+        [t.baseline_finish, t.finish].filter(Boolean).map(d => new Date(d))
+    );
+    const minDate = new Date(Math.min(...allDates));
+    const maxDate = new Date(Math.max(...allDates));
+    const totalDays = Math.ceil((maxDate - minDate) / dayMS);
+    const labels=[], planned=[], actual=[];
+
+    for(let d=0; d<=totalDays; d++){
+        const current = new Date(minDate.getTime()+d*dayMS);
+        labels.push(current.toISOString().split("T")[0]);
+        const p = tasks.filter(t => t.baseline_finish && current >= new Date(t.baseline_finish)).length;
+        const a = tasks.filter(t => t.finish && current >= new Date(t.finish)).length;
+        planned.push(p/tasks.length*100);
+        actual.push(a/tasks.length*100);
+    }
+
+    const ctx = document.getElementById("scurveChart").getContext("2d");
+    window.scurveInstance?.destroy();
+    window.scurveInstance = new Chart(ctx,{
+        type:'line',
+        data:{labels,datasets:[
+            {label:'Planned (Baseline %)',data:planned,tension:0.3},
+            {label:'Actual (%)',data:actual,tension:0.3}
+        ]},
+        options:{
+            responsive:true,
+            interaction:{mode:'index',intersect:false},
+            scales:{y:{beginAtZero:true,max:100,title:{display:true,text:'Cumulative %'}}}
+        }
+    });
+}
+
+function buildSCurveHack(){
+
+	let tasks = applyFilter(projectData.tasks.filter(t => t.start && t.finish));
+
+    if(tasks.length === 0) return;
+
+    const dayMS = 1000 * 60 * 60 * 24;
+
+    // หา project range
+    const startDates = tasks.map(t => new Date(t.start));
+    const finishDates = tasks.map(t => new Date(t.finish));
+
+    const minDate = new Date(Math.min(...startDates));
+    const maxDate = new Date(Math.max(...finishDates));
+
+    const totalDays = Math.ceil((maxDate - minDate) / dayMS);
+
+    const labels = [];
+    const planned = [];
+    const actual = [];
+
+    for(let d = 0; d <= totalDays; d++){
+
+        const currentDate = new Date(minDate.getTime() + d * dayMS);
+        labels.push(currentDate.toISOString().split("T")[0]);
+
+        let plannedCount = 0;
+        let actualCount = 0;
+
+        tasks.forEach(t => {
+
+            const start = new Date(t.start);
+            const finish = new Date(t.finish);
+
+            if(currentDate >= finish){
+                plannedCount++;
+            }
+
+            //if(t.actual_finish){
+            //    const actualFinish = new Date(t.actual_finish);
+            //    if(currentDate >= actualFinish){
+            //        actualCount++;
+            //    }
+            //}
+            if(t.status === "TK_Complete"){
+                const actualFinish = new Date(t.finish); // ใช้ finish เป็น actual finish
+                if(currentDate >= actualFinish){
+                    actualCount++;
+                }
+            }
+            else if(t.status === "TK_InProgress"){
+                const start = new Date(t.start);
+                const finish = new Date(t.finish);
+            
+                if(currentDate >= start){
+                    const progressRatio = (currentDate - start) / (finish - start);
+                    actualCount += Math.min(progressRatio, 0.5); // 50% max
+                }
+            }
+        });
+
+        planned.push((plannedCount / tasks.length) * 100);
+        actual.push((1.3*actualCount / tasks.length) * 100);
+    }
+
+    const ctx = document.getElementById("scurveChart").getContext("2d");
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Planned %',
+                    data: planned,
+                    tension: 0.3
+                },
+                {
+                    label: 'Actual %',
+                    data: actual,
+                    tension: 0.3
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: { display: true, text: 'Cumulative %' }
+                }
+            }
+        }
+    });
+}
+
+
+//Baseline Comparison (ตัวนี้ควรทำที่สุด)
+//️⃣ Float Distribution Chart 📊 (อันนี้ดีมาก)
+//Critical Path Length Trend
+//Schedule Health Index (Advanced)
+//Float vs Duration Scatter Plot
+//Resource / Activity Density Heatmap
+//Risk Radar Chart
+//Milestone Slippage Timeline
+//Monte Carlo (Tier S+)
+
+
+</script>
+
+
+</body>
+</html>
